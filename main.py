@@ -336,6 +336,7 @@ class AirCombatGame:
             WIDTH // 2,
             start_y + gap,
             self.show_username_window,
+            icon_photo=self.pilot_menu_photo,
         )
         self.menu_records_tag = self.create_menu_canvas_button(
             "RECORDS",
@@ -524,6 +525,7 @@ class AirCombatGame:
             "heart": "heart.png",
             "trophy": "trophy.png",
             "rocket": "rocket.png",
+            "pilot": "pilot.png",
             "keyboard": "keyboard.png",
             "shutdown": "shutdown.png",
         }
@@ -577,6 +579,12 @@ class AirCombatGame:
             rocket_icon = self.make_white_transparent(img.convert("RGBA")).resize(
                 (TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample
             )
+
+        with Image.open(self.asset_dir / files["pilot"]) as img:
+            pilot_base = self.make_white_transparent(img.convert("RGBA")).resize(
+                (TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample
+            )
+            pilot_icon = self.tint_with_alpha(pilot_base, (226, 232, 240))
 
         with Image.open(self.asset_dir / files["keyboard"]) as img:
             keyboard_base = self.make_white_transparent(img.convert("RGBA")).resize(
@@ -652,6 +660,7 @@ class AirCombatGame:
         self.trophy_records_photo = ImageTk.PhotoImage(trophy_records)
         self.trophy_records_pulse_photos = [ImageTk.PhotoImage(img) for img in trophy_records_pulse]
         self.rocket_menu_photo = ImageTk.PhotoImage(rocket_icon)
+        self.pilot_menu_photo = ImageTk.PhotoImage(pilot_icon)
         self.keyboard_menu_photo = ImageTk.PhotoImage(keyboard_icon)
         self.shutdown_menu_photo = ImageTk.PhotoImage(shutdown_icon)
         self.menu_overlay_photo = ImageTk.PhotoImage(menu_overlay)
