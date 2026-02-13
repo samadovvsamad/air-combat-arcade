@@ -41,6 +41,7 @@ MENU_BUTTON_WIDTH = 200
 MENU_BUTTON_HEIGHT = 50
 MENU_BUTTON_RADIUS = 25
 MENU_BUTTON_GAP = 20
+MENU_BUTTON_VERTICAL_OFFSET = 70
 TROPHY_MENU_SIZE = 18
 TROPHY_UI_SIZE = 14
 TROPHY_RECORDS_SIZE = 48
@@ -57,21 +58,22 @@ OPENING_SOUND_FILE = "main.mp3"
 OPENING_SOUND_TARGET_VOLUME = 700
 OPENING_SOUND_FADE_STEP = 40
 OPENING_SOUND_FADE_INTERVAL_MS = 90
-DEFAULT_USERNAME = "Pilot"
+DEFAULT_USERNAMES = ("Ghost", "AirWolf", "Viper", "Phoenix", "Falcon")
 MAX_USERNAME_LENGTH = 20
-UNLIMITED_LIVES_TEST = True
+UNLIMITED_LIVES_TEST = True 
 
 
 class AirCombatGame:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sky Assault")
+        self.root.title("Air Combat")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self.quit_application)
 
         self.asset_dir = Path(__file__).resolve().parent / "images"
         self.sound_dir = Path(__file__).resolve().parent / "sounds"
         self.records_path = Path(__file__).resolve().parent / "records.json"
+        self.default_username = random.choice(DEFAULT_USERNAMES)
         self.records = self.load_records()
         self.load_assets()
         self.opening_sound_path = self.sound_dir / OPENING_SOUND_FILE
@@ -101,7 +103,7 @@ class AirCombatGame:
         self.username_window = None
         self.username_backdrop = None
         self.username_entry_var = None
-        self.username = DEFAULT_USERNAME
+        self.username = self.default_username
         self.menu_points = 0
         self.unlimited_lives_test = UNLIMITED_LIVES_TEST
 
@@ -293,7 +295,7 @@ class AirCombatGame:
         self.menu_title_glow = self.canvas.create_text(
             WIDTH // 2 + 2,
             160,
-            text="SKY ASSAULT",
+            text="AIR COMBAT",
             fill="#93c5fd",
             font=("Segoe UI Black", 46, "bold"),
             tags=("menu", "ui"),
@@ -301,7 +303,7 @@ class AirCombatGame:
         self.menu_title_shadow = self.canvas.create_text(
             WIDTH // 2 + 2,
             164,
-            text="SKY ASSAULT",
+            text="AIR COMBAT",
             fill="#0b1220",
             font=("Segoe UI Black", 46, "bold"),
             tags=("menu", "ui"),
@@ -309,13 +311,20 @@ class AirCombatGame:
         self.menu_title = self.canvas.create_text(
             WIDTH // 2,
             160,
-            text="SKY ASSAULT",
+            text="AIR COMBAT",
             fill="#e2e8f0",
             font=("Segoe UI Black", 46, "bold"),
             tags=("menu", "ui"),
         )
-        self.menu_username_text = self.canvas.create_text(
+        self.menu_username_icon = self.canvas.create_image(
             20,
+            20,
+            anchor="nw",
+            image=self.pilot_menu_photo,
+            tags=("menu", "ui"),
+        )
+        self.menu_username_text = self.canvas.create_text(
+            44,
             18,
             anchor="nw",
             text=f"Pilot: {self.username}",
@@ -327,7 +336,7 @@ class AirCombatGame:
         gap = MENU_BUTTON_HEIGHT + MENU_BUTTON_GAP
         menu_rows = 5
         total_height = menu_rows * MENU_BUTTON_HEIGHT + (menu_rows - 1) * MENU_BUTTON_GAP
-        start_y = HEIGHT // 2 - (total_height // 2) + MENU_BUTTON_HEIGHT // 2 + 40
+        start_y = HEIGHT // 2 - (total_height // 2) + MENU_BUTTON_HEIGHT // 2 + MENU_BUTTON_VERTICAL_OFFSET
         self.menu_start_tag = self.create_menu_canvas_button(
             "START", WIDTH // 2, start_y, self.start_game_from_menu, icon_photo=self.rocket_menu_photo
         )
@@ -527,6 +536,7 @@ class AirCombatGame:
             "rocket": "rocket.png",
             "pilot": "pilot.png",
             "keyboard": "keyboard.png",
+            "reset": "reset.png",
             "shutdown": "shutdown.png",
         }
         missing = [name for name in files.values() if not (self.asset_dir / name).exists()]
@@ -591,6 +601,12 @@ class AirCombatGame:
                 (TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample
             )
             keyboard_icon = self.tint_with_alpha(keyboard_base, (226, 232, 240))
+
+        with Image.open(self.asset_dir / files["reset"]) as img:
+            reset_base = self.make_white_transparent(img.convert("RGBA")).resize(
+                (TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample
+            )
+            reset_icon = self.tint_with_alpha(reset_base, (248, 113, 113))
 
         with Image.open(self.asset_dir / files["shutdown"]) as img:
             shutdown_icon = self.make_white_transparent(img.convert("RGBA")).resize(
@@ -662,6 +678,7 @@ class AirCombatGame:
         self.rocket_menu_photo = ImageTk.PhotoImage(rocket_icon)
         self.pilot_menu_photo = ImageTk.PhotoImage(pilot_icon)
         self.keyboard_menu_photo = ImageTk.PhotoImage(keyboard_icon)
+        self.reset_menu_photo = ImageTk.PhotoImage(reset_icon)
         self.shutdown_menu_photo = ImageTk.PhotoImage(shutdown_icon)
         self.menu_overlay_photo = ImageTk.PhotoImage(menu_overlay)
         self.menu_button_normal_photo = ImageTk.PhotoImage(menu_button_normal)
@@ -839,7 +856,7 @@ class AirCombatGame:
         self.shortcuts_backdrop.lift()
 
         self.shortcuts_window = tk.Toplevel(self.root)
-        self.shortcuts_window.title("Sky Assault Keyboard Shortcuts")
+        self.shortcuts_window.title("Air Combat Keyboard Shortcuts")
         self.shortcuts_window.configure(bg="#0f172a")
         self.shortcuts_window.resizable(False, False)
 
@@ -944,11 +961,10 @@ class AirCombatGame:
                 pass
             self.shortcuts_backdrop = None
 
-    @staticmethod
-    def normalize_username(value):
+    def normalize_username(self, value):
         name = str(value).strip() if value is not None else ""
         if not name:
-            name = DEFAULT_USERNAME
+            name = self.default_username
         return name[:MAX_USERNAME_LENGTH]
 
     def show_username_window(self):
@@ -975,7 +991,7 @@ class AirCombatGame:
         self.username_backdrop.lift()
 
         self.username_window = tk.Toplevel(self.root)
-        self.username_window.title("Sky Assault Username")
+        self.username_window.title("Air Combat Username")
         self.username_window.configure(bg="#0f172a")
         self.username_window.resizable(False, False)
 
@@ -1115,7 +1131,7 @@ class AirCombatGame:
             try:
                 cleaned.append(
                     {
-                        "username": self.normalize_username(item.get("username", DEFAULT_USERNAME)),
+                        "username": self.normalize_username(item.get("username", DEFAULT_USERNAMES[0])),
                         "score": int(item.get("score", 0)),
                         "kills": int(item.get("kills", 0)),
                         "level": int(item.get("level", 1)),
@@ -1133,6 +1149,26 @@ class AirCombatGame:
             self.records_path.write_text(json.dumps(self.records, indent=2), encoding="utf-8")
         except OSError:
             pass
+
+    def reset_records(self):
+        if not self.records:
+            messagebox.showinfo("Air Combat Records", "No records to reset.")
+            return
+
+        confirm = messagebox.askyesno(
+            "Air Combat Records",
+            "Reset all saved records? This cannot be undone.",
+            icon="warning",
+        )
+        if not confirm:
+            return
+
+        self.records = []
+        self.save_records()
+
+        if self.records_window is not None and self.records_window.winfo_exists():
+            self.close_records_window()
+            self.show_records()
 
     def record_current_run(self):
         if self.round_recorded:
@@ -1178,11 +1214,11 @@ class AirCombatGame:
         self.records_backdrop.lift()
 
         self.records_window = tk.Toplevel(self.root)
-        self.records_window.title("🏆 Sky Assault Records")
+        self.records_window.title("🏆 Air Combat Records")
         self.records_window.configure(bg="#0f172a")
         self.records_window.resizable(False, False)
 
-        width, height = 700, 500
+        width, height = 700, 540
         win_x = root_x + max(0, (root_w - width) // 2)
         win_y = root_y + max(0, (root_h - height) // 2)
         self.records_window.geometry(f"{width}x{height}+{win_x}+{win_y}")
@@ -1218,6 +1254,9 @@ class AirCombatGame:
 
         separator = tk.Frame(outer, height=2, bg="#334155")
         separator.pack(fill="x", pady=(8, 12))
+
+        actions = tk.Frame(outer, bg="#0f172a")
+        actions.pack(side="bottom", fill="x", pady=(12, 0))
 
         panel = tk.Frame(
             outer,
@@ -1366,8 +1405,26 @@ class AirCombatGame:
                     font=("Segoe UI", 10),
                 ).pack(side="left")
 
-        actions = tk.Frame(outer, bg="#0f172a")
-        actions.pack(fill="x", pady=(12, 0))
+        reset_btn = tk.Button(
+            actions,
+            text="Reset Records",
+            image=self.reset_menu_photo,
+            compound="left",
+            command=self.reset_records,
+            font=("Segoe UI", 10, "bold"),
+            bg="#3f1d22",
+            fg="#fecaca",
+            activebackground="#7f1d1d",
+            activeforeground="#fee2e2",
+            relief="flat",
+            bd=0,
+            padx=12,
+            pady=6,
+            highlightthickness=0,
+            takefocus=False,
+            cursor="hand2",
+        )
+        reset_btn.pack(side="left")
 
         close_btn = tk.Button(
             actions,
@@ -1836,7 +1893,7 @@ def main():
     try:
         AirCombatGame(root)
     except RuntimeError as error:
-        messagebox.showerror("Sky Assault", str(error))
+        messagebox.showerror("Air Combat", str(error))
         root.destroy()
         return
     root.mainloop()
