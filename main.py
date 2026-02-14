@@ -1,6 +1,7 @@
 ﻿import json
 import random
 import time
+import math
 import ctypes
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,16 @@ HEART_DROP_SPEED = 175
 BACKGROUND_DARK_KILLS = 10
 BACKGROUND_SNOW_KILLS = 20
 ENEMY_SWAP_KILLS = 25
+ENEMY_DOUBLE_SHOT_KILLS = 30
+ENEMY_DEATH_PARTICLES_MIN = 8
+ENEMY_DEATH_PARTICLES_MAX = 14
+ENEMY_DEATH_PARTICLE_SPEED_MIN = 150
+ENEMY_DEATH_PARTICLE_SPEED_MAX = 320
+ENEMY_DEATH_PARTICLE_RADIUS_MIN = 2.0
+ENEMY_DEATH_PARTICLE_RADIUS_MAX = 4.5
+ENEMY_DEATH_PARTICLE_LIFETIME_MIN = 0.35
+ENEMY_DEATH_PARTICLE_LIFETIME_MAX = 0.65
+ENEMY_DEATH_PARTICLE_DRAG = 1.8
 BG_TRANSITION_DURATION = 1.2
 BG_TRANSITION_FRAMES = 24
 MENU_PLANE_SPEED = 120
@@ -42,6 +53,7 @@ MENU_BUTTON_HEIGHT = 50
 MENU_BUTTON_RADIUS = 25
 MENU_BUTTON_GAP = 20
 MENU_BUTTON_VERTICAL_OFFSET = 70
+WINDOW_ICON_SIZE = 32
 TROPHY_MENU_SIZE = 18
 TROPHY_UI_SIZE = 14
 TROPHY_RECORDS_SIZE = 48
@@ -76,6 +88,7 @@ class AirCombatGame:
         self.default_username = random.choice(DEFAULT_USERNAMES)
         self.records = self.load_records()
         self.load_assets()
+        self.apply_window_icon(self.root, default=True)
         self.opening_sound_path = self.sound_dir / OPENING_SOUND_FILE
         self.opening_sound_alias = "sky_assault_opening"
         self.opening_sound_loaded = False
@@ -110,6 +123,7 @@ class AirCombatGame:
         self.enemies = []
         self.bullets = []
         self.powerups = []
+        self.particles = []
 
         self.score = 0
         self.kills = 0
@@ -179,6 +193,14 @@ class AirCombatGame:
         self.show_main_menu()
         self.play_opening_sound()
         self.loop()
+
+    def apply_window_icon(self, window, default=False):
+        if not hasattr(self, "window_icon_photo"):
+            return
+        try:
+            window.iconphoto(default, self.window_icon_photo)
+        except tk.TclError:
+            pass
 
     def apply_menu_button_visual(self, button):
         if button["pressed"]:
@@ -385,9 +407,12 @@ class AirCombatGame:
             self.canvas.delete(bullet["id"])
         for powerup in self.powerups:
             self.canvas.delete(powerup["id"])
+        for particle in self.particles:
+            self.canvas.delete(particle["id"])
         self.enemies.clear()
         self.bullets.clear()
         self.powerups.clear()
+        self.particles.clear()
 
     def show_main_menu(self):
         self.menu_active = True
@@ -537,6 +562,7 @@ class AirCombatGame:
             "pilot": "pilot.png",
             "keyboard": "keyboard.png",
             "reset": "reset.png",
+            "game_icon": "game_icon.png",
             "shutdown": "shutdown.png",
         }
         missing = [name for name in files.values() if not (self.asset_dir / name).exists()]
@@ -607,6 +633,9 @@ class AirCombatGame:
                 (TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample
             )
             reset_icon = self.tint_with_alpha(reset_base, (248, 113, 113))
+
+        with Image.open(self.asset_dir / files["game_icon"]) as img:
+            game_icon = img.convert("RGBA").resize((WINDOW_ICON_SIZE, WINDOW_ICON_SIZE), resample)
 
         with Image.open(self.asset_dir / files["shutdown"]) as img:
             shutdown_icon = self.make_white_transparent(img.convert("RGBA")).resize(
@@ -679,6 +708,7 @@ class AirCombatGame:
         self.pilot_menu_photo = ImageTk.PhotoImage(pilot_icon)
         self.keyboard_menu_photo = ImageTk.PhotoImage(keyboard_icon)
         self.reset_menu_photo = ImageTk.PhotoImage(reset_icon)
+        self.window_icon_photo = ImageTk.PhotoImage(game_icon)
         self.shutdown_menu_photo = ImageTk.PhotoImage(shutdown_icon)
         self.menu_overlay_photo = ImageTk.PhotoImage(menu_overlay)
         self.menu_button_normal_photo = ImageTk.PhotoImage(menu_button_normal)
@@ -859,6 +889,7 @@ class AirCombatGame:
         self.shortcuts_window.title("Air Combat Keyboard Shortcuts")
         self.shortcuts_window.configure(bg="#0f172a")
         self.shortcuts_window.resizable(False, False)
+        self.apply_window_icon(self.shortcuts_window)
 
         width, height = 420, 300
         win_x = root_x + max(0, (root_w - width) // 2)
@@ -994,6 +1025,7 @@ class AirCombatGame:
         self.username_window.title("Air Combat Username")
         self.username_window.configure(bg="#0f172a")
         self.username_window.resizable(False, False)
+        self.apply_window_icon(self.username_window)
 
         width, height = 420, 210
         win_x = root_x + max(0, (root_w - width) // 2)
@@ -1217,6 +1249,7 @@ class AirCombatGame:
         self.records_window.title("🏆 Air Combat Records")
         self.records_window.configure(bg="#0f172a")
         self.records_window.resizable(False, False)
+        self.apply_window_icon(self.records_window)
 
         width, height = 700, 540
         win_x = root_x + max(0, (root_w - width) // 2)
@@ -1513,6 +1546,7 @@ class AirCombatGame:
             self.update_difficulty()
             self.update_hud()
 
+        self.update_particles(dt)
         self.canvas.tag_raise("ui")
         self.root.after(int(1000 / FPS), self.loop)
 
@@ -1534,6 +1568,84 @@ class AirCombatGame:
             self.menu_points += 1
             self.canvas.coords(self.menu_plane, -80, random.randint(140, 210))
             break
+
+    @staticmethod
+    def lerp_color(start_rgb, end_rgb, t):
+        return tuple(int(start_rgb[i] + (end_rgb[i] - start_rgb[i]) * t) for i in range(3))
+
+    @staticmethod
+    def rgb_to_hex(rgb):
+        return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+
+    def spawn_enemy_death_particles(self, enemy_id):
+        box = self.canvas.bbox(enemy_id)
+        if not box:
+            return
+
+        cx = (box[0] + box[2]) / 2
+        cy = (box[1] + box[3]) / 2
+        count = random.randint(ENEMY_DEATH_PARTICLES_MIN, ENEMY_DEATH_PARTICLES_MAX)
+        palettes = (
+            ((251, 191, 36), (120, 53, 15)),
+            ((248, 113, 113), (127, 29, 29)),
+            ((125, 211, 252), (12, 74, 110)),
+        )
+
+        for _ in range(count):
+            start_color, end_color = random.choice(palettes)
+            angle = random.uniform(0.0, 6.283185307)
+            speed = random.uniform(ENEMY_DEATH_PARTICLE_SPEED_MIN, ENEMY_DEATH_PARTICLE_SPEED_MAX)
+            radius = random.uniform(ENEMY_DEATH_PARTICLE_RADIUS_MIN, ENEMY_DEATH_PARTICLE_RADIUS_MAX)
+            particle_id = self.canvas.create_oval(
+                cx - radius,
+                cy - radius,
+                cx + radius,
+                cy + radius,
+                fill=self.rgb_to_hex(start_color),
+                outline="",
+            )
+            self.particles.append(
+                {
+                    "id": particle_id,
+                    "x": cx,
+                    "y": cy,
+                    "vx": math.cos(angle) * speed,
+                    "vy": math.sin(angle) * speed,
+                    "age": 0.0,
+                    "life": random.uniform(
+                        ENEMY_DEATH_PARTICLE_LIFETIME_MIN, ENEMY_DEATH_PARTICLE_LIFETIME_MAX
+                    ),
+                    "radius": radius,
+                    "start_color": start_color,
+                    "end_color": end_color,
+                }
+            )
+
+    def update_particles(self, dt):
+        for particle in list(self.particles):
+            particle["age"] += dt
+            t = min(1.0, particle["age"] / particle["life"])
+            if t >= 1.0:
+                self.canvas.delete(particle["id"])
+                self.particles.remove(particle)
+                continue
+
+            particle["x"] += particle["vx"] * dt
+            particle["y"] += particle["vy"] * dt
+            drag = max(0.0, 1.0 - ENEMY_DEATH_PARTICLE_DRAG * dt)
+            particle["vx"] *= drag
+            particle["vy"] *= drag
+
+            radius = max(0.2, particle["radius"] * (1.0 - 0.8 * t))
+            color = self.lerp_color(particle["start_color"], particle["end_color"], t)
+            self.canvas.coords(
+                particle["id"],
+                particle["x"] - radius,
+                particle["y"] - radius,
+                particle["x"] + radius,
+                particle["y"] + radius,
+            )
+            self.canvas.itemconfig(particle["id"], fill=self.rgb_to_hex(color))
 
     def update_player(self, dt):
         left = "a" in self.pressed_keys or "left" in self.pressed_keys
@@ -1625,10 +1737,13 @@ class AirCombatGame:
                 enemy["vx"] *= -1
 
             if now >= enemy["next_shot"] and y1 > 0:
-                bullet = self.canvas.create_image((x1 + x2) / 2, y2 + 10, image=self.enemy_bullet_photo)
-                self.bullets.append(
-                    {"id": bullet, "owner": "enemy", "vy": ENEMY_BULLET_SPEED + self.level * 18}
-                )
+                shot_x = (x1 + x2) / 2
+                shot_y = y2 + 10
+                shot_vy = ENEMY_BULLET_SPEED + self.level * 18
+                shot_offsets = (-12, 12) if self.kills >= ENEMY_DOUBLE_SHOT_KILLS else (0,)
+                for offset in shot_offsets:
+                    bullet = self.canvas.create_image(shot_x + offset, shot_y, image=self.enemy_bullet_photo)
+                    self.bullets.append({"id": bullet, "owner": "enemy", "vy": shot_vy})
                 enemy["next_shot"] = now + enemy["shoot_delay"] * random.uniform(0.85, 1.2)
 
             if y1 > HEIGHT + 40:
@@ -1739,6 +1854,7 @@ class AirCombatGame:
                 player_box = self.canvas.bbox(self.player) or player_box
 
     def destroy_enemy(self, enemy, give_points):
+        self.spawn_enemy_death_particles(enemy["id"])
         self.canvas.delete(enemy["id"])
         if enemy in self.enemies:
             self.enemies.remove(enemy)
