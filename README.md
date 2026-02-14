@@ -1,53 +1,12 @@
-﻿# Air Combat (Python Aircraft Shooter)
+# Air Combat
 
-A top-down aircraft shooter built with Python, `tkinter`, and `Pillow`.
+Top-down aircraft shooter built with Python `tkinter` + `Pillow`.
 
-## Assets
+## Requirements
 
-The game uses local assets from:
-
-- `images/`
-  - `my aircraft.png` (player)
-  - `enemy.png` (enemy)
-  - `enemy2.png` (enemy sprite after 25 kills)
-  - `bullet.jpg` (bullet sprite)
-  - `bg.jpg` (day background)
-  - `dark.jpg` (dark background)
-  - `snow.jpg` (snow background)
-  - `heart.png` (life icon)
-  - `trophy.png` (records icon)
-  - `rocket.png` (start icon)
-  - `pilot.png` (username icon)
-  - `keyboard.png` (shortcuts icon)
-  - `reset.png` (reset records icon)
-  - `shutdown.png` (quit icon)
-  - `game_icon.png` (window/app icon)
-- `sounds/`
-  - `main.mp3` (menu music)
-
-## Features
-
-- Air Combat main menu UI with animated enemy fly-by.
-- Menu music (`sounds/main.mp3`) with soft fade-in.
-- Music stops when gameplay starts.
-- Window icon from `images/game_icon.png` applied to main and popup windows.
-- Interactive main menu:
-  - You can move and shoot in the menu.
-  - Shooting the menu enemy target is supported.
-- Username system:
-  - Dedicated `USERNAME` menu button.
-  - Default username is random at app start from:
-    - `Ghost`, `AirWolf`, `Viper`, `Phoenix`, `Falcon`
-- Records system:
-  - Top 10 records saved in `records.json`.
-  - Records include `username`, `score`, `kills`, `level`, `played_at`.
-  - `Reset Records` button (with `reset.png` icon) clears all saved records with confirmation.
-- Gameplay progression:
-  - Background transitions after 10 and 20 kills.
-  - Enemy sprite changes after 25 kills.
-  - Enemy double-shot starts after 30 kills.
-  - Enemy death VFX: each destroyed enemy spawns 8-14 small circles that fly outward and fade.
-  - Heart drops every 10 kills to reward extra life.
+- Python 3.10+
+- Pillow (`pip install pillow`)
+- Windows is recommended for menu music playback (`winmm`/MCI is used for `main.mp3`)
 
 ## Run
 
@@ -56,6 +15,52 @@ pip install pillow
 python main.py
 ```
 
+## Core Features
+
+- Main menu with custom canvas buttons and icon set.
+- Subtle animated cloud-drift menu background (slow, seamless vertical loop).
+- Interactive menu: player can move/fire and down the menu enemy target.
+- Menu music (`sounds/main.mp3`) with soft fade-in and looping.
+- Menu music stops when gameplay starts.
+- Cinematic mission start sequence:
+  - Fade from black.
+  - Center animated icon (`images/start_anim.gif`) with gentle float.
+  - `MISSION START` text fade in/out.
+  - Seamless transition into gameplay.
+- Window icon (`images/game_icon.png`) applied to main and popup windows.
+
+## Gameplay Features
+
+- Dual controls: `W/A/S/D` or Arrow Keys.
+- Progressive difficulty (spawn rate + enemy speed scale by level).
+- Enemy visual swap at `25` kills (`enemy2.png`).
+- Enemy double-shot at `30` kills.
+- Enemy death particles: `8-14` outward fading circles.
+- Light screen shake on enemy destruction (short, decaying, auto-centered).
+- Background progression by kills:
+  - Day -> Dark at `10`.
+  - Dark -> Snow at `20`.
+- Heart power-up drop every `10` kills.
+
+## HUD and UI
+
+- Score/Level/Kills HUD includes a semi-transparent dark panel + subtle text shadow for bright backgrounds.
+- Lives UI includes:
+  - Semi-transparent panel.
+  - Heart icon + `Lives` label + value text.
+  - Gentle heart pulse animation.
+- Username shown in the menu with pilot icon.
+
+## Username and Records
+
+- Username popup from main menu (`USERNAME` button).
+- Default username is randomized each launch from:
+  - `Ghost`, `AirWolf`, `Viper`, `Phoenix`, `Falcon`
+- Records saved to `records.json` (top 10).
+- Record fields: `username`, `score`, `kills`, `level`, `played_at`.
+- Records popup includes `Reset Records` button with `images/reset.png`.
+- Reset action asks for confirmation before clearing data.
+
 ## Controls
 
 ### Gameplay
@@ -63,31 +68,45 @@ python main.py
 - `W/A/S/D` or Arrow Keys: Move
 - `Space`: Fire
 - `P`: Pause/Resume
-- `M`: Return to Main Menu
-- `R` or `Enter`: Restart after game over
+- `M`: Back to main menu
+- `R` or `Enter`: Restart (after game over)
 
 ### Main Menu
 
 - `Enter`: Start game
-- `U`: Open username dialog
-- `K` or `H`: Open shortcuts dialog
-- `Esc`: Quit app
-- `W/A/S/D` or Arrow Keys + `Space`: Move/shoot in menu
+- `U`: Open username popup
+- `K` or `H`: Open shortcuts popup
+- `Esc`: Quit
+- `W/A/S/D` or Arrow Keys + `Space`: Move/fire in menu
 
-## Main Menu Buttons
+## Assets
 
-- `START`
-- `USERNAME`
-- `RECORDS`
-- `SHORTCUTS`
-- `QUIT`
+Expected files:
+
+- `images/my aircraft.png`
+- `images/enemy.png`
+- `images/enemy2.png`
+- `images/bullet.jpg`
+- `images/bg.jpg`
+- `images/dark.jpg`
+- `images/snow.jpg`
+- `images/heart.png`
+- `images/trophy.png`
+- `images/rocket.png`
+- `images/pilot.png`
+- `images/keyboard.png`
+- `images/reset.png`
+- `images/shutdown.png`
+- `images/game_icon.png`
+- `images/start_anim.gif`
+- `sounds/main.mp3`
 
 ## Test Mode
 
-`UNLIMITED_LIVES_TEST` controls invincible/infinite-life testing behavior in `main.py`.
+Set in `main.py`:
 
-- `True`: HUD shows `xINF`, player does not lose lives.
-- `False`: Normal 3-life gameplay.
+- `UNLIMITED_LIVES_TEST = True`: infinite/test lives (`xINF`)
+- `UNLIMITED_LIVES_TEST = False`: normal 3-life gameplay
 
 ## Build EXE (Windows)
 
@@ -96,6 +115,6 @@ python -m pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --onefile --name AirCombat --add-data "images;images" --add-data "sounds;sounds" --add-data "records.json;." main.py
 ```
 
-Build output:
+Output:
 
 - `dist/AirCombat.exe`

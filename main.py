@@ -53,6 +53,12 @@ MENU_BUTTON_HEIGHT = 50
 MENU_BUTTON_RADIUS = 25
 MENU_BUTTON_GAP = 20
 MENU_BUTTON_VERTICAL_OFFSET = 70
+MENU_CLOUD_DRIFT_SPEED = 4.2
+MENU_CLOUD_LAYER_PADDING = 120
+MENU_CLOUD_BLOB_COUNT = 22
+MENU_CLOUD_MIN_ALPHA = 10
+MENU_CLOUD_MAX_ALPHA = 26
+MENU_CLOUD_BLUR_RADIUS = 16
 WINDOW_ICON_SIZE = 32
 TROPHY_MENU_SIZE = 18
 TROPHY_UI_SIZE = 14
@@ -72,7 +78,40 @@ OPENING_SOUND_FADE_STEP = 40
 OPENING_SOUND_FADE_INTERVAL_MS = 90
 DEFAULT_USERNAMES = ("Ghost", "AirWolf", "Viper", "Phoenix", "Falcon")
 MAX_USERNAME_LENGTH = 20
-UNLIMITED_LIVES_TEST = True 
+UNLIMITED_LIVES_TEST = True
+START_ANIMATION_FILE = "start_anim.gif"
+START_ANIMATION_WIDTH = 300
+START_ANIMATION_HEIGHT = 300
+START_ANIMATION_FALLBACK_MS = 1200
+START_INTRO_TEXT_MS = 700
+START_FADE_IN_MS = 850
+START_INPUT_DELAY_MS = 1100
+START_INTRO_TEXT = "AIR COMBAT\nMISSION BRIEFING"
+START_READY_TEXT = "READY... ENGAGE!"
+MISSION_START_TEXT = "MISSION START"
+MISSION_START_TOTAL_MS = 1600
+MISSION_START_FADE_IN_MS = 420
+MISSION_START_HOLD_MS = 620
+MISSION_START_ICON_FLOAT_AMPLITUDE = 4.0
+MISSION_START_ICON_FLOAT_PERIOD = 1.25
+MISSION_START_ICON_FADE_STEPS = 12
+SCREEN_SHAKE_DURATION = 0.24
+SCREEN_SHAKE_MIN_OFFSET = 2.0
+SCREEN_SHAKE_MAX_OFFSET = 3.0
+HUD_SCORE_X = 14
+HUD_SCORE_Y = 12
+HUD_TEXT_SHADOW_OFFSET = 1
+HUD_PANEL_PAD_X = 8
+HUD_PANEL_PAD_Y = 5
+LIVES_ICON_BASE_SIZE = 20
+LIVES_LABEL_X = WIDTH - 135
+LIVES_LABEL_Y = 22
+LIVES_VALUE_X = WIDTH - 78
+LIVES_PANEL_PAD_X = 8
+LIVES_PANEL_PAD_Y = 5
+LIVES_PULSE_PERIOD = 1.8
+LIVES_ICON_PULSE_SIZES = (19, 20, 21, 20)
+LIVES_ICON_BASE_FRAME_INDEX = 1
 
 
 class AirCombatGame:
@@ -142,28 +181,95 @@ class AirCombatGame:
         self.bg_transition_frame_index = 0
         self.bg_transition_frames = []
         self.bg_transition_target_stage = 0
+        self.menu_cloud_height = 0
+        self.start_transition_active = False
+        self.start_transition_phase = "idle"
+        self.start_transition_frame_index = 0
+        self.start_transition_next_frame_time = 0.0
+        self.start_transition_fallback_end_time = 0.0
+        self.start_transition_intro_end_time = 0.0
+        self.start_transition_started_at = 0.0
+        self.start_transition_fade_start_time = 0.0
+        self.start_transition_fade_end_time = 0.0
+        self.start_transition_controls_unlock_time = 0.0
+        self.start_transition_icon_base_y = HEIGHT // 2 - 14
+        self.start_transition_overlay_stipples = ("", "gray75", "gray50", "gray25", "gray12")
+        self.screen_shake_offset_x = 0.0
+        self.screen_shake_offset_y = 0.0
+        self.screen_shake_started_at = 0.0
+        self.screen_shake_end_time = 0.0
+        self.screen_shake_duration = SCREEN_SHAKE_DURATION
+        self.screen_shake_magnitude = 0.0
+        self.lives_pulse_frame_index = LIVES_ICON_BASE_FRAME_INDEX
 
         self.player = self.canvas.create_image(WIDTH // 2, HEIGHT - 72, image=self.player_photo)
 
+        self.hud_panel = self.canvas.create_rectangle(
+            HUD_SCORE_X,
+            HUD_SCORE_Y,
+            HUD_SCORE_X + 10,
+            HUD_SCORE_Y + 10,
+            fill="#020617",
+            outline="#334155",
+            width=1,
+            stipple="gray50",
+            tags=("ui",),
+        )
+        self.hud_shadow = self.canvas.create_text(
+            HUD_SCORE_X + HUD_TEXT_SHADOW_OFFSET,
+            HUD_SCORE_Y + HUD_TEXT_SHADOW_OFFSET,
+            anchor="nw",
+            fill="#0b1220",
+            font=("Segoe UI", 15, "bold"),
+            text="",
+            tags=("ui",),
+        )
         self.hud = self.canvas.create_text(
-            14,
-            12,
+            HUD_SCORE_X,
+            HUD_SCORE_Y,
             anchor="nw",
             fill="#f8fafc",
             font=("Segoe UI", 15, "bold"),
             text="",
             tags=("ui",),
         )
-        self.lives_icon = self.canvas.create_image(WIDTH - 110, 22, image=self.heart_hud_photo, tags=("ui",))
+        self.canvas.tag_lower(self.hud_panel, self.hud_shadow)
+        self.lives_panel = self.canvas.create_rectangle(
+            LIVES_LABEL_X,
+            LIVES_LABEL_Y,
+            LIVES_LABEL_X + 10,
+            LIVES_LABEL_Y + 10,
+            fill="#020617",
+            outline="#334155",
+            width=1,
+            stipple="gray50",
+            tags=("ui",),
+        )
+        self.lives_icon = self.canvas.create_image(
+            WIDTH - 160,
+            LIVES_LABEL_Y,
+            image=self.heart_hud_pulse_photos[LIVES_ICON_BASE_FRAME_INDEX],
+            tags=("ui",),
+        )
+        self.lives_label = self.canvas.create_text(
+            LIVES_LABEL_X,
+            LIVES_LABEL_Y,
+            anchor="w",
+            fill="#cbd5e1",
+            font=("Segoe UI", 11, "bold"),
+            text="Lives",
+            tags=("ui",),
+        )
         self.lives_text = self.canvas.create_text(
-            WIDTH - 90,
-            22,
+            LIVES_VALUE_X,
+            LIVES_LABEL_Y,
             anchor="w",
             fill="#f8fafc",
             font=("Segoe UI", 13, "bold"),
             text="xINF" if self.unlimited_lives_test else "x3",
             tags=("ui",),
         )
+        self.canvas.tag_lower(self.lives_panel, self.lives_icon)
         self.bonus_text = self.canvas.create_text(
             WIDTH // 2,
             48,
@@ -183,6 +289,33 @@ class AirCombatGame:
             text="",
             state="hidden",
             tags=("ui",),
+        )
+        self.start_transition_overlay = self.canvas.create_rectangle(
+            0,
+            0,
+            WIDTH,
+            HEIGHT,
+            fill="#020617",
+            outline="",
+            state="hidden",
+            tags=("start_transition", "ui"),
+        )
+        initial_start_photo = self.mission_start_icon_fade_photos[0] if self.mission_start_icon_fade_photos else None
+        self.start_transition_image = self.canvas.create_image(
+            WIDTH // 2,
+            self.start_transition_icon_base_y,
+            image=initial_start_photo,
+            state="hidden",
+            tags=("start_transition", "ui"),
+        )
+        self.start_transition_text = self.canvas.create_text(
+            WIDTH // 2,
+            HEIGHT // 2 + 180,
+            fill="#e2e8f0",
+            font=("Segoe UI", 18, "bold"),
+            text=MISSION_START_TEXT,
+            state="hidden",
+            tags=("start_transition", "ui"),
         )
         self.create_main_menu()
 
@@ -301,6 +434,18 @@ class AirCombatGame:
 
     def create_main_menu(self):
         self.menu_buttons = {}
+        self.menu_cloud_primary = self.canvas.create_image(
+            WIDTH // 2,
+            HEIGHT // 2,
+            image=self.menu_cloud_photo,
+            tags=("menu", "menu_bg"),
+        )
+        self.menu_cloud_secondary = self.canvas.create_image(
+            WIDTH // 2,
+            HEIGHT // 2 - self.menu_cloud_height,
+            image=self.menu_cloud_photo,
+            tags=("menu", "menu_bg"),
+        )
         self.menu_overlay = self.canvas.create_image(
             WIDTH // 2,
             HEIGHT // 2,
@@ -314,6 +459,7 @@ class AirCombatGame:
             tags=("menu", "ui"),
         )
         self.canvas.tag_lower(self.menu_plane, self.menu_overlay)
+        self.canvas.tag_lower("menu_bg", self.menu_overlay)
         self.menu_title_glow = self.canvas.create_text(
             WIDTH // 2 + 2,
             160,
@@ -390,13 +536,19 @@ class AirCombatGame:
     def set_game_ui_visible(self, visible):
         state = "normal" if visible else "hidden"
         for item_id in (
+            self.hud_panel,
+            self.hud_shadow,
             self.hud,
+            self.lives_panel,
             self.lives_icon,
+            self.lives_label,
             self.lives_text,
         ):
             self.canvas.itemconfig(item_id, state=state)
 
         if not visible:
+            self.lives_pulse_frame_index = LIVES_ICON_BASE_FRAME_INDEX
+            self.canvas.itemconfig(self.lives_icon, image=self.heart_hud_pulse_photos[self.lives_pulse_frame_index])
             self.canvas.itemconfig(self.bonus_text, state="hidden")
             self.canvas.itemconfig(self.overlay, state="hidden")
 
@@ -415,6 +567,8 @@ class AirCombatGame:
         self.particles.clear()
 
     def show_main_menu(self):
+        self.cancel_start_transition()
+        self.clear_screen_shake()
         self.menu_active = True
         self.game_started = False
         self.running = True
@@ -433,6 +587,8 @@ class AirCombatGame:
         self.last_player_shot = 0.0
         self.clear_dynamic_entities()
         self.canvas.itemconfig(self.background_id, image=self.bg_day_photo)
+        self.canvas.coords(self.background_id, WIDTH // 2, HEIGHT // 2)
+        self.reset_menu_cloud_positions()
         self.canvas.coords(self.player, WIDTH // 2, HEIGHT - 72)
         self.canvas.itemconfig(self.player, state="normal")
         self.canvas.itemconfig(self.menu_username_text, text=f"Pilot: {self.username}")
@@ -444,22 +600,215 @@ class AirCombatGame:
         self.canvas.itemconfig("menu", state="normal")
         self.canvas.coords(self.menu_plane, -80, random.randint(140, 210))
 
-    def hide_main_menu(self):
+    def hide_main_menu(self, show_game_ui=True):
         self.menu_active = False
         self.canvas.itemconfig("menu", state="hidden")
-        self.set_game_ui_visible(True)
+        self.canvas.coords(self.background_id, WIDTH // 2, HEIGHT // 2)
+        self.set_game_ui_visible(show_game_ui)
 
     def start_game_from_menu(self):
+        if self.start_transition_active:
+            return
+
         self.game_started = True
         self.close_username_window()
         self.unload_opening_sound()
+        self.hide_main_menu(show_game_ui=False)
+        self.begin_start_transition()
+
+    def set_start_transition_overlay_opacity(self, opacity):
+        opacity = max(0.0, min(1.0, opacity))
+        if opacity <= 0.02:
+            self.canvas.itemconfig(self.start_transition_overlay, state="hidden")
+            return
+
+        if opacity >= 0.85:
+            stipple = self.start_transition_overlay_stipples[0]
+        elif opacity >= 0.65:
+            stipple = self.start_transition_overlay_stipples[1]
+        elif opacity >= 0.45:
+            stipple = self.start_transition_overlay_stipples[2]
+        elif opacity >= 0.22:
+            stipple = self.start_transition_overlay_stipples[3]
+        else:
+            stipple = self.start_transition_overlay_stipples[4]
+
+        self.canvas.itemconfig(
+            self.start_transition_overlay,
+            state="normal",
+            fill="#020617",
+            stipple=stipple,
+        )
+
+    def begin_start_transition(self):
+        now = time.monotonic()
+        fade_in_duration = MISSION_START_FADE_IN_MS / 1000.0
+        hold_duration = MISSION_START_HOLD_MS / 1000.0
+        total_duration = MISSION_START_TOTAL_MS / 1000.0
+        if total_duration <= fade_in_duration + hold_duration:
+            total_duration = fade_in_duration + hold_duration + 0.2
+
+        self.start_transition_active = True
+        self.start_transition_phase = "cinematic"
+        self.start_transition_started_at = now
+        self.start_transition_intro_end_time = now + fade_in_duration
+        self.start_transition_fallback_end_time = self.start_transition_intro_end_time + hold_duration
+        self.start_transition_fade_end_time = now + total_duration
+        self.start_transition_controls_unlock_time = self.start_transition_fade_end_time
+        self.start_transition_frame_index = 0
+        self.start_transition_next_frame_time = 0.0
+        self.start_transition_fade_start_time = 0.0
+
         self.restart()
-        self.hide_main_menu()
+        self.running = False
+        self.paused = False
+        self.pressed_keys.clear()
+        self.clear_screen_shake()
+        self.set_game_ui_visible(False)
+        self.canvas.itemconfig(self.player, state="hidden")
+        self.canvas.itemconfig(self.overlay, state="hidden")
+        self.canvas.itemconfig(self.bonus_text, state="hidden")
+        self.canvas.coords(self.background_id, WIDTH // 2, HEIGHT // 2)
+
+        self.canvas.itemconfig(self.start_transition_text, text=MISSION_START_TEXT, fill="#334155", state="normal")
+        if self.start_animation_photos:
+            self.start_transition_frame_index = 0
+            self.canvas.itemconfig(
+                self.start_transition_image,
+                image=self.start_animation_photos[0],
+                state="normal",
+            )
+            first_duration = self.start_animation_durations[0] if self.start_animation_durations else 50
+            self.start_transition_next_frame_time = now + max(0.02, first_duration / 1000.0)
+        elif self.mission_start_icon_fade_photos:
+            self.canvas.itemconfig(
+                self.start_transition_image,
+                image=self.mission_start_icon_fade_photos[0],
+                state="normal",
+            )
+        else:
+            self.canvas.itemconfig(self.start_transition_image, state="hidden")
+        self.canvas.coords(self.start_transition_image, WIDTH // 2, self.start_transition_icon_base_y)
+        self.set_start_transition_overlay_opacity(1.0)
+
+    def update_start_transition(self, now):
+        if not self.start_transition_active:
+            return
+        if self.start_transition_phase != "cinematic":
+            return
+
+        if now >= self.start_transition_fade_end_time:
+            self.finish_start_transition()
+            return
+
+        total_duration = max(0.001, self.start_transition_fade_end_time - self.start_transition_started_at)
+        fade_in_duration = max(0.001, self.start_transition_intro_end_time - self.start_transition_started_at)
+        hold_end_duration = max(fade_in_duration, self.start_transition_fallback_end_time - self.start_transition_started_at)
+
+        elapsed = max(0.0, now - self.start_transition_started_at)
+        progress = min(1.0, elapsed / total_duration)
+
+        if elapsed <= fade_in_duration:
+            content_alpha = elapsed / fade_in_duration
+        elif elapsed <= hold_end_duration:
+            content_alpha = 1.0
+        else:
+            fade_out_duration = max(0.001, total_duration - hold_end_duration)
+            content_alpha = 1.0 - ((elapsed - hold_end_duration) / fade_out_duration)
+        content_alpha = max(0.0, min(1.0, content_alpha))
+
+        overlay_alpha = max(0.0, 1.0 - min(1.0, progress / 0.55))
+        self.set_start_transition_overlay_opacity(overlay_alpha)
+
+        text_color = self.rgb_to_hex(self.lerp_color((51, 65, 85), (226, 232, 240), content_alpha))
+        self.canvas.itemconfig(
+            self.start_transition_text,
+            fill=text_color,
+            state="normal" if content_alpha > 0.03 else "hidden",
+        )
+
+        if self.start_animation_photos:
+            if now >= self.start_transition_next_frame_time:
+                frame_count = len(self.start_animation_photos)
+                steps = 0
+                max_steps = 2
+                # Cap catch-up steps so dropped frames do not create big visible jumps.
+                while now >= self.start_transition_next_frame_time and steps < max_steps:
+                    self.start_transition_frame_index = (self.start_transition_frame_index + 1) % frame_count
+                    duration_ms = self.start_animation_durations[self.start_transition_frame_index]
+                    self.start_transition_next_frame_time += max(0.02, duration_ms / 1000.0)
+                    steps += 1
+
+                if now >= self.start_transition_next_frame_time:
+                    duration_ms = self.start_animation_durations[self.start_transition_frame_index]
+                    self.start_transition_next_frame_time = now + max(0.02, duration_ms / 1000.0)
+
+                self.canvas.itemconfig(
+                    self.start_transition_image,
+                    image=self.start_animation_photos[self.start_transition_frame_index],
+                )
+        elif self.mission_start_icon_fade_photos:
+            max_index = len(self.mission_start_icon_fade_photos) - 1
+            icon_index = min(max_index, max(0, int(round(content_alpha * max_index))))
+            if icon_index != self.start_transition_frame_index:
+                self.start_transition_frame_index = icon_index
+                self.canvas.itemconfig(
+                    self.start_transition_image,
+                    image=self.mission_start_icon_fade_photos[icon_index],
+                )
+
+        if self.start_animation_photos or self.mission_start_icon_fade_photos:
+            float_phase = (elapsed / MISSION_START_ICON_FLOAT_PERIOD) * (2 * math.pi)
+            float_offset = math.sin(float_phase) * MISSION_START_ICON_FLOAT_AMPLITUDE * content_alpha
+            self.canvas.coords(
+                self.start_transition_image,
+                WIDTH // 2,
+                self.start_transition_icon_base_y + float_offset,
+            )
+            self.canvas.itemconfig(
+                self.start_transition_image,
+                state="normal" if content_alpha > 0.03 else "hidden",
+            )
+
+    def finish_start_transition(self):
+        self.cancel_start_transition()
+        self.game_started = True
+        self.running = True
+        self.paused = False
+        self.pressed_keys.clear()
+        self.last_spawn_time = time.monotonic()
+        self.canvas.itemconfig(self.player, state="normal")
+        self.update_hud()
+        self.set_game_ui_visible(True)
+
+    def cancel_start_transition(self):
+        self.start_transition_active = False
+        self.start_transition_phase = "idle"
+        self.start_transition_frame_index = 0
+        self.start_transition_next_frame_time = 0.0
+        self.start_transition_fallback_end_time = 0.0
+        self.start_transition_intro_end_time = 0.0
+        self.start_transition_started_at = 0.0
+        self.start_transition_fade_start_time = 0.0
+        self.start_transition_fade_end_time = 0.0
+        self.start_transition_controls_unlock_time = 0.0
+
+        if hasattr(self, "canvas"):
+            self.canvas.itemconfig("start_transition", state="hidden")
+            self.canvas.itemconfig(self.start_transition_overlay, stipple="")
+            self.canvas.itemconfig(self.start_transition_text, text=MISSION_START_TEXT)
+            if hasattr(self, "start_animation_photos") and self.start_animation_photos:
+                self.canvas.itemconfig(self.start_transition_image, image=self.start_animation_photos[0])
+            elif hasattr(self, "mission_start_icon_fade_photos") and self.mission_start_icon_fade_photos:
+                self.canvas.itemconfig(self.start_transition_image, image=self.mission_start_icon_fade_photos[0])
+            self.canvas.coords(self.start_transition_image, WIDTH // 2, self.start_transition_icon_base_y)
 
     def quit_application(self):
         self.close_records_window()
         self.close_shortcuts_window()
         self.close_username_window()
+        self.cancel_start_transition()
+        self.clear_screen_shake()
         self.unload_opening_sound()
         self.root.destroy()
 
@@ -535,9 +884,29 @@ class AirCombatGame:
         self.opening_sound_loaded = False
         self.opening_sound_volume = 0
 
+    def reset_menu_cloud_positions(self):
+        if not hasattr(self, "menu_cloud_primary") or not hasattr(self, "menu_cloud_secondary"):
+            return
+
+        self.canvas.coords(self.menu_cloud_primary, WIDTH // 2, HEIGHT // 2)
+        self.canvas.coords(self.menu_cloud_secondary, WIDTH // 2, HEIGHT // 2 - self.menu_cloud_height)
+
     def update_menu_animation(self, dt):
         if not self.menu_active:
             return
+
+        self.canvas.move(self.menu_cloud_primary, 0, MENU_CLOUD_DRIFT_SPEED * dt)
+        self.canvas.move(self.menu_cloud_secondary, 0, MENU_CLOUD_DRIFT_SPEED * dt)
+
+        half_h = self.menu_cloud_height / 2
+        primary_y = self.canvas.coords(self.menu_cloud_primary)[1]
+        secondary_y = self.canvas.coords(self.menu_cloud_secondary)[1]
+
+        if primary_y - half_h >= HEIGHT:
+            self.canvas.coords(self.menu_cloud_primary, WIDTH // 2, secondary_y - self.menu_cloud_height)
+            primary_y = self.canvas.coords(self.menu_cloud_primary)[1]
+        if secondary_y - half_h >= HEIGHT:
+            self.canvas.coords(self.menu_cloud_secondary, WIDTH // 2, primary_y - self.menu_cloud_height)
 
         self.canvas.move(self.menu_plane, MENU_PLANE_SPEED * dt, 0)
         coords = self.canvas.coords(self.menu_plane)
@@ -563,6 +932,7 @@ class AirCombatGame:
             "keyboard": "keyboard.png",
             "reset": "reset.png",
             "game_icon": "game_icon.png",
+            "start_animation": START_ANIMATION_FILE,
             "shutdown": "shutdown.png",
         }
         missing = [name for name in files.values() if not (self.asset_dir / name).exists()]
@@ -579,6 +949,22 @@ class AirCombatGame:
 
         with Image.open(self.asset_dir / files["snow_background"]) as img:
             bg_snow = img.convert("RGB").resize((WIDTH, HEIGHT), resample)
+
+        menu_cloud_height = HEIGHT + MENU_CLOUD_LAYER_PADDING * 2
+        menu_cloud = Image.new("RGBA", (WIDTH, menu_cloud_height), (0, 0, 0, 0))
+        cloud_draw = ImageDraw.Draw(menu_cloud)
+        cloud_rng = random.Random(37)
+        for _ in range(MENU_CLOUD_BLOB_COUNT):
+            cx = cloud_rng.randint(-180, WIDTH + 180)
+            cy = cloud_rng.randint(MENU_CLOUD_LAYER_PADDING, menu_cloud_height - MENU_CLOUD_LAYER_PADDING)
+            rx = cloud_rng.randint(110, 260)
+            ry = cloud_rng.randint(34, 90)
+            alpha = cloud_rng.randint(MENU_CLOUD_MIN_ALPHA, MENU_CLOUD_MAX_ALPHA)
+            cloud_draw.ellipse(
+                [cx - rx, cy - ry, cx + rx, cy + ry],
+                fill=(226, 236, 248, alpha),
+            )
+        menu_cloud = menu_cloud.filter(ImageFilter.GaussianBlur(MENU_CLOUD_BLUR_RADIUS))
 
         with Image.open(self.asset_dir / files["player"]) as img:
             player = img.convert("RGBA").resize((78, 78), resample)
@@ -599,17 +985,27 @@ class AirCombatGame:
 
         with Image.open(self.asset_dir / files["heart"]) as img:
             heart_base = self.make_white_transparent(img.convert("RGBA"))
-            heart_hud = heart_base.resize((20, 20), resample)
+            heart_hud = heart_base.resize((LIVES_ICON_BASE_SIZE, LIVES_ICON_BASE_SIZE), resample)
+            heart_hud_pulse = [
+                heart_base.resize((size, size), resample)
+                for size in LIVES_ICON_PULSE_SIZES
+            ]
             heart_drop = heart_base.resize((28, 28), resample)
 
         with Image.open(self.asset_dir / files["trophy"]) as img:
             trophy_base = self.make_white_transparent(img.convert("RGBA"))
-            trophy_menu = trophy_base.resize((TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample)
-            trophy_ui = trophy_base.resize((TROPHY_UI_SIZE, TROPHY_UI_SIZE), resample)
-            trophy_records = trophy_base.resize((TROPHY_RECORDS_SIZE, TROPHY_RECORDS_SIZE), resample)
+            trophy_menu_base = trophy_base.resize((TROPHY_MENU_SIZE, TROPHY_MENU_SIZE), resample)
+            trophy_ui_base = trophy_base.resize((TROPHY_UI_SIZE, TROPHY_UI_SIZE), resample)
+            trophy_records_base = trophy_base.resize((TROPHY_RECORDS_SIZE, TROPHY_RECORDS_SIZE), resample)
+            trophy_menu = self.tint_with_alpha(trophy_menu_base, (250, 204, 21))
+            trophy_ui = self.tint_with_alpha(trophy_ui_base, (250, 204, 21))
+            trophy_records = self.tint_with_alpha(trophy_records_base, (250, 204, 21))
             trophy_pulse_sizes = list(range(TROPHY_PULSE_MIN, TROPHY_PULSE_MAX + 1, TROPHY_PULSE_STEP))
             trophy_pulse_sizes += list(range(TROPHY_PULSE_MAX - TROPHY_PULSE_STEP, TROPHY_PULSE_MIN, -TROPHY_PULSE_STEP))
-            trophy_records_pulse = [trophy_base.resize((size, size), resample) for size in trophy_pulse_sizes]
+            trophy_records_pulse = [
+                self.tint_with_alpha(trophy_base.resize((size, size), resample), (250, 204, 21))
+                for size in trophy_pulse_sizes
+            ]
 
         with Image.open(self.asset_dir / files["rocket"]) as img:
             rocket_icon = self.make_white_transparent(img.convert("RGBA")).resize(
@@ -636,6 +1032,31 @@ class AirCombatGame:
 
         with Image.open(self.asset_dir / files["game_icon"]) as img:
             game_icon = img.convert("RGBA").resize((WINDOW_ICON_SIZE, WINDOW_ICON_SIZE), resample)
+
+        start_animation_frames = []
+        start_animation_durations = []
+        with Image.open(self.asset_dir / files["start_animation"]) as img:
+            frame_count = getattr(img, "n_frames", 1)
+            for frame_index in range(frame_count):
+                img.seek(frame_index)
+                frame = img.convert("RGBA").resize((START_ANIMATION_WIDTH, START_ANIMATION_HEIGHT), resample)
+                duration_ms = int(img.info.get("duration", 50))
+                start_animation_frames.append(frame)
+                start_animation_durations.append(max(20, duration_ms))
+
+        if start_animation_frames:
+            mission_start_icon_source = start_animation_frames[0]
+        else:
+            mission_start_icon_source = player.resize((160, 160), resample)
+        mission_start_icon_source = mission_start_icon_source.convert("RGBA")
+        mission_start_icon_alpha = mission_start_icon_source.split()[-1]
+        mission_start_icon_fade = []
+        for step in range(MISSION_START_ICON_FADE_STEPS):
+            opacity = step / max(1, MISSION_START_ICON_FADE_STEPS - 1)
+            alpha_layer = mission_start_icon_alpha.point(lambda px, o=opacity: int(px * o))
+            frame = mission_start_icon_source.copy()
+            frame.putalpha(alpha_layer)
+            mission_start_icon_fade.append(frame)
 
         with Image.open(self.asset_dir / files["shutdown"]) as img:
             shutdown_icon = self.make_white_transparent(img.convert("RGBA")).resize(
@@ -693,12 +1114,15 @@ class AirCombatGame:
         self.bg_dark_photo = self.bg_day_to_dark_photos[-1]
         self.bg_snow_photo = self.bg_dark_to_snow_photos[-1]
         self.bg_photo = self.bg_day_photo
+        self.menu_cloud_height = menu_cloud_height
+        self.menu_cloud_photo = ImageTk.PhotoImage(menu_cloud)
         self.player_photo = ImageTk.PhotoImage(player)
         self.enemy_photo = ImageTk.PhotoImage(enemy)
         self.enemy2_photo = ImageTk.PhotoImage(enemy2)
         self.player_bullet_photo = ImageTk.PhotoImage(player_bullet)
         self.enemy_bullet_photo = ImageTk.PhotoImage(enemy_bullet)
         self.heart_hud_photo = ImageTk.PhotoImage(heart_hud)
+        self.heart_hud_pulse_photos = [ImageTk.PhotoImage(img) for img in heart_hud_pulse]
         self.heart_drop_photo = ImageTk.PhotoImage(heart_drop)
         self.trophy_menu_photo = ImageTk.PhotoImage(trophy_menu)
         self.trophy_ui_photo = ImageTk.PhotoImage(trophy_ui)
@@ -709,6 +1133,9 @@ class AirCombatGame:
         self.keyboard_menu_photo = ImageTk.PhotoImage(keyboard_icon)
         self.reset_menu_photo = ImageTk.PhotoImage(reset_icon)
         self.window_icon_photo = ImageTk.PhotoImage(game_icon)
+        self.start_animation_photos = [ImageTk.PhotoImage(frame) for frame in start_animation_frames]
+        self.start_animation_durations = start_animation_durations
+        self.mission_start_icon_fade_photos = [ImageTk.PhotoImage(frame) for frame in mission_start_icon_fade]
         self.shutdown_menu_photo = ImageTk.PhotoImage(shutdown_icon)
         self.menu_overlay_photo = ImageTk.PhotoImage(menu_overlay)
         self.menu_button_normal_photo = ImageTk.PhotoImage(menu_button_normal)
@@ -808,6 +1235,9 @@ class AirCombatGame:
 
     def on_key_press(self, event):
         key = event.keysym.lower()
+
+        if self.start_transition_active:
+            return
 
         if self.username_window is not None and self.username_window.winfo_exists():
             if key == "escape":
@@ -1527,9 +1957,12 @@ class AirCombatGame:
         now = time.monotonic()
         dt = min(now - self.last_frame_time, 0.045)
         self.last_frame_time = now
+        self.set_screen_shake_offset(0.0, 0.0)
         self.update_background_transition(now)
 
-        if self.menu_active:
+        if self.start_transition_active:
+            self.update_start_transition(now)
+        elif self.menu_active:
             self.update_menu_animation(dt)
             self.update_player(dt)
             self.handle_player_fire(now)
@@ -1547,8 +1980,15 @@ class AirCombatGame:
             self.update_hud()
 
         self.update_particles(dt)
+        self.update_screen_shake(now)
+        self.update_lives_pulse(now)
         self.canvas.tag_raise("ui")
         self.root.after(int(1000 / FPS), self.loop)
+
+    def handle_menu_enemy_down(self):
+        self.spawn_enemy_death_particles(self.menu_plane)
+        self.menu_points += 1
+        self.canvas.coords(self.menu_plane, -80, random.randint(140, 210))
 
     def check_menu_collisions(self):
         plane_box = self.canvas.bbox(self.menu_plane)
@@ -1565,9 +2005,12 @@ class AirCombatGame:
 
             self.canvas.delete(bullet["id"])
             self.bullets.remove(bullet)
-            self.menu_points += 1
-            self.canvas.coords(self.menu_plane, -80, random.randint(140, 210))
-            break
+            self.handle_menu_enemy_down()
+            return
+
+        player_box = self.canvas.bbox(self.player)
+        if player_box and self.overlaps(player_box, plane_box):
+            self.handle_menu_enemy_down()
 
     @staticmethod
     def lerp_color(start_rgb, end_rgb, t):
@@ -1646,6 +2089,67 @@ class AirCombatGame:
                 particle["y"] + radius,
             )
             self.canvas.itemconfig(particle["id"], fill=self.rgb_to_hex(color))
+
+    def iter_shake_world_item_ids(self):
+        yield self.background_id
+        yield self.player
+        yield self.menu_plane
+        for enemy in self.enemies:
+            yield enemy["id"]
+        for bullet in self.bullets:
+            yield bullet["id"]
+        for powerup in self.powerups:
+            yield powerup["id"]
+        for particle in self.particles:
+            yield particle["id"]
+
+    def move_shake_world(self, dx, dy):
+        if abs(dx) < 0.001 and abs(dy) < 0.001:
+            return
+
+        for item_id in self.iter_shake_world_item_ids():
+            try:
+                self.canvas.move(item_id, dx, dy)
+            except tk.TclError:
+                pass
+
+    def set_screen_shake_offset(self, target_x, target_y):
+        dx = target_x - self.screen_shake_offset_x
+        dy = target_y - self.screen_shake_offset_y
+        if abs(dx) < 0.001 and abs(dy) < 0.001:
+            return
+
+        self.move_shake_world(dx, dy)
+        self.screen_shake_offset_x = target_x
+        self.screen_shake_offset_y = target_y
+
+    def clear_screen_shake(self):
+        self.set_screen_shake_offset(0.0, 0.0)
+        self.screen_shake_started_at = 0.0
+        self.screen_shake_end_time = 0.0
+        self.screen_shake_duration = SCREEN_SHAKE_DURATION
+        self.screen_shake_magnitude = 0.0
+
+    def trigger_screen_shake(self):
+        now = time.monotonic()
+        self.screen_shake_started_at = now
+        self.screen_shake_end_time = now + SCREEN_SHAKE_DURATION
+        self.screen_shake_duration = SCREEN_SHAKE_DURATION
+        self.screen_shake_magnitude = random.uniform(SCREEN_SHAKE_MIN_OFFSET, SCREEN_SHAKE_MAX_OFFSET)
+
+    def update_screen_shake(self, now):
+        if now >= self.screen_shake_end_time:
+            self.set_screen_shake_offset(0.0, 0.0)
+            return
+
+        duration = max(0.001, self.screen_shake_duration)
+        progress = min(1.0, (now - self.screen_shake_started_at) / duration)
+        decay = (1.0 - progress) * (1.0 - progress)
+        amplitude = self.screen_shake_magnitude * decay
+
+        offset_x = random.uniform(-amplitude, amplitude)
+        offset_y = random.uniform(-amplitude, amplitude)
+        self.set_screen_shake_offset(offset_x, offset_y)
 
     def update_player(self, dt):
         left = "a" in self.pressed_keys or "left" in self.pressed_keys
@@ -1855,6 +2359,7 @@ class AirCombatGame:
 
     def destroy_enemy(self, enemy, give_points):
         self.spawn_enemy_death_particles(enemy["id"])
+        self.trigger_screen_shake()
         self.canvas.delete(enemy["id"])
         if enemy in self.enemies:
             self.enemies.remove(enemy)
@@ -1942,12 +2447,56 @@ class AirCombatGame:
         self.spawn_interval = max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL - (self.level - 1) * 0.06)
 
     def update_hud(self):
-        self.canvas.itemconfig(
-            self.hud,
-            text=f"Score: {self.score}   Level: {self.level}   Kills: {self.kills}",
-        )
+        score_text = f"Score: {self.score}   Level: {self.level}   Kills: {self.kills}"
+        self.canvas.itemconfig(self.hud_shadow, text=score_text)
+        self.canvas.itemconfig(self.hud, text=score_text)
+
+        hud_box = self.canvas.bbox(self.hud)
+        if hud_box:
+            x1, y1, x2, y2 = hud_box
+            self.canvas.coords(
+                self.hud_panel,
+                x1 - HUD_PANEL_PAD_X,
+                y1 - HUD_PANEL_PAD_Y,
+                x2 + HUD_PANEL_PAD_X,
+                y2 + HUD_PANEL_PAD_Y,
+            )
+
         lives_text = "xINF" if self.unlimited_lives_test else f"x{self.lives}"
+        self.canvas.itemconfig(self.lives_label, text="Lives")
         self.canvas.itemconfig(self.lives_text, text=lives_text)
+
+        icon_box = self.canvas.bbox(self.lives_icon)
+        label_box = self.canvas.bbox(self.lives_label)
+        value_box = self.canvas.bbox(self.lives_text)
+        if icon_box and label_box and value_box:
+            x1 = min(icon_box[0], label_box[0], value_box[0])
+            y1 = min(icon_box[1], label_box[1], value_box[1])
+            x2 = max(icon_box[2], label_box[2], value_box[2])
+            y2 = max(icon_box[3], label_box[3], value_box[3])
+            self.canvas.coords(
+                self.lives_panel,
+                x1 - LIVES_PANEL_PAD_X,
+                y1 - LIVES_PANEL_PAD_Y,
+                x2 + LIVES_PANEL_PAD_X,
+                y2 + LIVES_PANEL_PAD_Y,
+            )
+
+    def update_lives_pulse(self, now):
+        if not self.game_started or self.menu_active or self.start_transition_active:
+            target_index = LIVES_ICON_BASE_FRAME_INDEX
+        else:
+            phase = (now % LIVES_PULSE_PERIOD) / LIVES_PULSE_PERIOD
+            target_index = int(phase * len(self.heart_hud_pulse_photos)) % len(self.heart_hud_pulse_photos)
+
+        if target_index == self.lives_pulse_frame_index:
+            return
+
+        self.lives_pulse_frame_index = target_index
+        self.canvas.itemconfig(
+            self.lives_icon,
+            image=self.heart_hud_pulse_photos[self.lives_pulse_frame_index],
+        )
 
     def game_over(self):
         if not self.running:
@@ -1964,6 +2513,7 @@ class AirCombatGame:
         )
 
     def restart(self):
+        self.clear_screen_shake()
         self.clear_dynamic_entities()
 
         self.score = 0
@@ -1989,6 +2539,7 @@ class AirCombatGame:
         self.canvas.coords(self.player, WIDTH // 2, HEIGHT - 72)
         self.canvas.itemconfig(self.player, state="normal")
         self.canvas.itemconfig(self.background_id, image=self.bg_day_photo)
+        self.canvas.coords(self.background_id, WIDTH // 2, HEIGHT // 2)
         self.canvas.itemconfig(self.bonus_text, state="hidden")
         self.canvas.itemconfig(self.overlay, state="hidden")
         self.update_hud()
@@ -2017,3 +2568,58 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
