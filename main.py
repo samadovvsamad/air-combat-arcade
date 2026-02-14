@@ -82,12 +82,6 @@ UNLIMITED_LIVES_TEST = True
 START_ANIMATION_FILE = "start_anim.gif"
 START_ANIMATION_WIDTH = 300
 START_ANIMATION_HEIGHT = 300
-START_ANIMATION_FALLBACK_MS = 1200
-START_INTRO_TEXT_MS = 700
-START_FADE_IN_MS = 850
-START_INPUT_DELAY_MS = 1100
-START_INTRO_TEXT = "AIR COMBAT\nMISSION BRIEFING"
-START_READY_TEXT = "READY... ENGAGE!"
 MISSION_START_TEXT = "MISSION START"
 MISSION_START_TOTAL_MS = 1600
 MISSION_START_FADE_IN_MS = 420
@@ -103,7 +97,6 @@ HUD_SCORE_Y = 12
 HUD_TEXT_SHADOW_OFFSET = 1
 HUD_PANEL_PAD_X = 8
 HUD_PANEL_PAD_Y = 5
-LIVES_ICON_BASE_SIZE = 20
 LIVES_LABEL_X = WIDTH - 135
 LIVES_LABEL_Y = 22
 LIVES_VALUE_X = WIDTH - 78
@@ -156,7 +149,6 @@ class AirCombatGame:
         self.username_backdrop = None
         self.username_entry_var = None
         self.username = self.default_username
-        self.menu_points = 0
         self.unlimited_lives_test = UNLIMITED_LIVES_TEST
 
         self.enemies = []
@@ -191,7 +183,6 @@ class AirCombatGame:
         self.start_transition_started_at = 0.0
         self.start_transition_fade_start_time = 0.0
         self.start_transition_fade_end_time = 0.0
-        self.start_transition_controls_unlock_time = 0.0
         self.start_transition_icon_base_y = HEIGHT // 2 - 14
         self.start_transition_overlay_stipples = ("", "gray75", "gray50", "gray25", "gray12")
         self.screen_shake_offset_x = 0.0
@@ -334,6 +325,75 @@ class AirCombatGame:
             window.iconphoto(default, self.window_icon_photo)
         except tk.TclError:
             pass
+
+    @staticmethod
+    def widget_is_open(window):
+        return window is not None and window.winfo_exists()
+
+    def focus_window_if_open(self, window):
+        if not self.widget_is_open(window):
+            return False
+
+        window.lift()
+        window.focus_set()
+        return True
+
+    def get_root_bounds(self):
+        self.root.update_idletasks()
+        return (
+            self.root.winfo_rootx(),
+            self.root.winfo_rooty(),
+            self.root.winfo_width(),
+            self.root.winfo_height(),
+        )
+
+    def create_modal_backdrop(self, bounds, alpha):
+        root_x, root_y, root_w, root_h = bounds
+        backdrop = tk.Toplevel(self.root)
+        backdrop.overrideredirect(True)
+        backdrop.geometry(f"{root_w}x{root_h}+{root_x}+{root_y}")
+        backdrop.configure(bg="#000000")
+        try:
+            backdrop.attributes("-alpha", alpha)
+        except tk.TclError:
+            pass
+        backdrop.transient(self.root)
+        backdrop.lift()
+        return backdrop
+
+    def create_modal_window(self, title, width, height, bounds, on_close):
+        root_x, root_y, root_w, root_h = bounds
+        window = tk.Toplevel(self.root)
+        window.title(title)
+        window.configure(bg="#0f172a")
+        window.resizable(False, False)
+        self.apply_window_icon(window)
+
+        win_x = root_x + max(0, (root_w - width) // 2)
+        win_y = root_y + max(0, (root_h - height) // 2)
+        window.geometry(f"{width}x{height}+{win_x}+{win_y}")
+        window.transient(self.root)
+        window.lift()
+        window.grab_set()
+        window.protocol("WM_DELETE_WINDOW", on_close)
+        window.bind("<Escape>", lambda _e: on_close())
+        return window
+
+    @staticmethod
+    def destroy_window(window, release_grab=False):
+        if window is None:
+            return None
+
+        if release_grab:
+            try:
+                window.grab_release()
+            except tk.TclError:
+                pass
+        try:
+            window.destroy()
+        except tk.TclError:
+            pass
+        return None
 
     def apply_menu_button_visual(self, button):
         if button["pressed"]:
@@ -583,7 +643,6 @@ class AirCombatGame:
         self.bg_transition_frame_index = 0
         self.bg_transition_frames = []
         self.bg_transition_target_stage = 0
-        self.menu_points = 0
         self.last_player_shot = 0.0
         self.clear_dynamic_entities()
         self.canvas.itemconfig(self.background_id, image=self.bg_day_photo)
@@ -654,7 +713,6 @@ class AirCombatGame:
         self.start_transition_intro_end_time = now + fade_in_duration
         self.start_transition_fallback_end_time = self.start_transition_intro_end_time + hold_duration
         self.start_transition_fade_end_time = now + total_duration
-        self.start_transition_controls_unlock_time = self.start_transition_fade_end_time
         self.start_transition_frame_index = 0
         self.start_transition_next_frame_time = 0.0
         self.start_transition_fade_start_time = 0.0
@@ -791,7 +849,6 @@ class AirCombatGame:
         self.start_transition_started_at = 0.0
         self.start_transition_fade_start_time = 0.0
         self.start_transition_fade_end_time = 0.0
-        self.start_transition_controls_unlock_time = 0.0
 
         if hasattr(self, "canvas"):
             self.canvas.itemconfig("start_transition", state="hidden")
@@ -985,7 +1042,6 @@ class AirCombatGame:
 
         with Image.open(self.asset_dir / files["heart"]) as img:
             heart_base = self.make_white_transparent(img.convert("RGBA"))
-            heart_hud = heart_base.resize((LIVES_ICON_BASE_SIZE, LIVES_ICON_BASE_SIZE), resample)
             heart_hud_pulse = [
                 heart_base.resize((size, size), resample)
                 for size in LIVES_ICON_PULSE_SIZES
@@ -1121,7 +1177,6 @@ class AirCombatGame:
         self.enemy2_photo = ImageTk.PhotoImage(enemy2)
         self.player_bullet_photo = ImageTk.PhotoImage(player_bullet)
         self.enemy_bullet_photo = ImageTk.PhotoImage(enemy_bullet)
-        self.heart_hud_photo = ImageTk.PhotoImage(heart_hud)
         self.heart_hud_pulse_photos = [ImageTk.PhotoImage(img) for img in heart_hud_pulse]
         self.heart_drop_photo = ImageTk.PhotoImage(heart_drop)
         self.trophy_menu_photo = ImageTk.PhotoImage(trophy_menu)
@@ -1164,18 +1219,6 @@ class AirCombatGame:
         tinted.putalpha(alpha)
         return tinted
 
-    @staticmethod
-    def build_rounded_panel(width, height, radius, fill_rgba, outline_rgba, outline_width=2):
-        panel = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(panel)
-        draw.rounded_rectangle(
-            [0, 0, width - 1, height - 1],
-            radius=radius,
-            fill=fill_rgba,
-            outline=outline_rgba,
-            width=outline_width,
-        )
-        return panel
 
     @staticmethod
     def build_gradient_rounded_panel(
@@ -1288,48 +1331,20 @@ class AirCombatGame:
         else:
             self.canvas.itemconfig(self.overlay, state="hidden")
 
-    def start_new_game(self):
-        self.record_current_run()
-        self.restart()
 
     def show_shortcuts(self):
-        if self.shortcuts_window is not None and self.shortcuts_window.winfo_exists():
-            self.shortcuts_window.lift()
-            self.shortcuts_window.focus_set()
+        if self.focus_window_if_open(self.shortcuts_window):
             return
 
-        self.root.update_idletasks()
-        root_x = self.root.winfo_rootx()
-        root_y = self.root.winfo_rooty()
-        root_w = self.root.winfo_width()
-        root_h = self.root.winfo_height()
-
-        self.shortcuts_backdrop = tk.Toplevel(self.root)
-        self.shortcuts_backdrop.overrideredirect(True)
-        self.shortcuts_backdrop.geometry(f"{root_w}x{root_h}+{root_x}+{root_y}")
-        self.shortcuts_backdrop.configure(bg="#000000")
-        try:
-            self.shortcuts_backdrop.attributes("-alpha", 0.55)
-        except tk.TclError:
-            pass
-        self.shortcuts_backdrop.transient(self.root)
-        self.shortcuts_backdrop.lift()
-
-        self.shortcuts_window = tk.Toplevel(self.root)
-        self.shortcuts_window.title("Air Combat Keyboard Shortcuts")
-        self.shortcuts_window.configure(bg="#0f172a")
-        self.shortcuts_window.resizable(False, False)
-        self.apply_window_icon(self.shortcuts_window)
-
-        width, height = 420, 300
-        win_x = root_x + max(0, (root_w - width) // 2)
-        win_y = root_y + max(0, (root_h - height) // 2)
-        self.shortcuts_window.geometry(f"{width}x{height}+{win_x}+{win_y}")
-        self.shortcuts_window.transient(self.root)
-        self.shortcuts_window.lift()
-        self.shortcuts_window.grab_set()
-        self.shortcuts_window.protocol("WM_DELETE_WINDOW", self.close_shortcuts_window)
-        self.shortcuts_window.bind("<Escape>", lambda _e: self.close_shortcuts_window())
+        bounds = self.get_root_bounds()
+        self.shortcuts_backdrop = self.create_modal_backdrop(bounds, alpha=0.55)
+        self.shortcuts_window = self.create_modal_window(
+            title="Air Combat Keyboard Shortcuts",
+            width=420,
+            height=300,
+            bounds=bounds,
+            on_close=self.close_shortcuts_window,
+        )
 
         outer = tk.Frame(self.shortcuts_window, bg="#0f172a", padx=24, pady=20)
         outer.pack(fill="both", expand=True)
@@ -1404,23 +1419,8 @@ class AirCombatGame:
         close_btn.pack(anchor="e", pady=(14, 0))
 
     def close_shortcuts_window(self):
-        if self.shortcuts_window is not None:
-            try:
-                self.shortcuts_window.grab_release()
-            except tk.TclError:
-                pass
-            try:
-                self.shortcuts_window.destroy()
-            except tk.TclError:
-                pass
-            self.shortcuts_window = None
-
-        if self.shortcuts_backdrop is not None:
-            try:
-                self.shortcuts_backdrop.destroy()
-            except tk.TclError:
-                pass
-            self.shortcuts_backdrop = None
+        self.shortcuts_window = self.destroy_window(self.shortcuts_window, release_grab=True)
+        self.shortcuts_backdrop = self.destroy_window(self.shortcuts_backdrop)
 
     def normalize_username(self, value):
         name = str(value).strip() if value is not None else ""
@@ -1429,43 +1429,18 @@ class AirCombatGame:
         return name[:MAX_USERNAME_LENGTH]
 
     def show_username_window(self):
-        if self.username_window is not None and self.username_window.winfo_exists():
-            self.username_window.lift()
-            self.username_window.focus_set()
+        if self.focus_window_if_open(self.username_window):
             return
 
-        self.root.update_idletasks()
-        root_x = self.root.winfo_rootx()
-        root_y = self.root.winfo_rooty()
-        root_w = self.root.winfo_width()
-        root_h = self.root.winfo_height()
-
-        self.username_backdrop = tk.Toplevel(self.root)
-        self.username_backdrop.overrideredirect(True)
-        self.username_backdrop.geometry(f"{root_w}x{root_h}+{root_x}+{root_y}")
-        self.username_backdrop.configure(bg="#000000")
-        try:
-            self.username_backdrop.attributes("-alpha", 0.55)
-        except tk.TclError:
-            pass
-        self.username_backdrop.transient(self.root)
-        self.username_backdrop.lift()
-
-        self.username_window = tk.Toplevel(self.root)
-        self.username_window.title("Air Combat Username")
-        self.username_window.configure(bg="#0f172a")
-        self.username_window.resizable(False, False)
-        self.apply_window_icon(self.username_window)
-
-        width, height = 420, 210
-        win_x = root_x + max(0, (root_w - width) // 2)
-        win_y = root_y + max(0, (root_h - height) // 2)
-        self.username_window.geometry(f"{width}x{height}+{win_x}+{win_y}")
-        self.username_window.transient(self.root)
-        self.username_window.lift()
-        self.username_window.grab_set()
-        self.username_window.protocol("WM_DELETE_WINDOW", self.close_username_window)
-        self.username_window.bind("<Escape>", lambda _e: self.close_username_window())
+        bounds = self.get_root_bounds()
+        self.username_backdrop = self.create_modal_backdrop(bounds, alpha=0.55)
+        self.username_window = self.create_modal_window(
+            title="Air Combat Username",
+            width=420,
+            height=210,
+            bounds=bounds,
+            on_close=self.close_username_window,
+        )
 
         outer = tk.Frame(self.username_window, bg="#0f172a", padx=24, pady=18)
         outer.pack(fill="both", expand=True)
@@ -1555,25 +1530,9 @@ class AirCombatGame:
         self.close_username_window()
 
     def close_username_window(self):
-        if self.username_window is not None:
-            try:
-                self.username_window.grab_release()
-            except tk.TclError:
-                pass
-            try:
-                self.username_window.destroy()
-            except tk.TclError:
-                pass
-            self.username_window = None
-
+        self.username_window = self.destroy_window(self.username_window, release_grab=True)
         self.username_entry_var = None
-
-        if self.username_backdrop is not None:
-            try:
-                self.username_backdrop.destroy()
-            except tk.TclError:
-                pass
-            self.username_backdrop = None
+        self.username_backdrop = self.destroy_window(self.username_backdrop)
 
     def load_records(self):
         if not self.records_path.exists():
@@ -1653,43 +1612,18 @@ class AirCombatGame:
         self.save_records()
 
     def show_records(self):
-        if self.records_window is not None and self.records_window.winfo_exists():
-            self.records_window.lift()
-            self.records_window.focus_set()
+        if self.focus_window_if_open(self.records_window):
             return
 
-        self.root.update_idletasks()
-        root_x = self.root.winfo_rootx()
-        root_y = self.root.winfo_rooty()
-        root_w = self.root.winfo_width()
-        root_h = self.root.winfo_height()
-
-        self.records_backdrop = tk.Toplevel(self.root)
-        self.records_backdrop.overrideredirect(True)
-        self.records_backdrop.geometry(f"{root_w}x{root_h}+{root_x}+{root_y}")
-        self.records_backdrop.configure(bg="#000000")
-        try:
-            self.records_backdrop.attributes("-alpha", 0.6)
-        except tk.TclError:
-            pass
-        self.records_backdrop.transient(self.root)
-        self.records_backdrop.lift()
-
-        self.records_window = tk.Toplevel(self.root)
-        self.records_window.title("🏆 Air Combat Records")
-        self.records_window.configure(bg="#0f172a")
-        self.records_window.resizable(False, False)
-        self.apply_window_icon(self.records_window)
-
-        width, height = 700, 540
-        win_x = root_x + max(0, (root_w - width) // 2)
-        win_y = root_y + max(0, (root_h - height) // 2)
-        self.records_window.geometry(f"{width}x{height}+{win_x}+{win_y}")
-        self.records_window.transient(self.root)
-        self.records_window.lift()
-        self.records_window.grab_set()
-        self.records_window.protocol("WM_DELETE_WINDOW", self.close_records_window)
-        self.records_window.bind("<Escape>", lambda _e: self.close_records_window())
+        bounds = self.get_root_bounds()
+        self.records_backdrop = self.create_modal_backdrop(bounds, alpha=0.6)
+        self.records_window = self.create_modal_window(
+            title="\U0001F3C6 Air Combat Records",
+            width=700,
+            height=540,
+            bounds=bounds,
+            on_close=self.close_records_window,
+        )
 
         outer = tk.Frame(self.records_window, bg="#0f172a", padx=24, pady=18)
         outer.pack(fill="both", expand=True)
@@ -1808,11 +1742,11 @@ class AirCombatGame:
 
                 rank_text = f"#{index}"
                 if index == 1:
-                    rank_text = "🥇 #1"
+                    rank_text = "\U0001F947 #1"
                 elif index == 2:
-                    rank_text = "🥈 #2"
+                    rank_text = "\U0001F948 #2"
                 elif index == 3:
-                    rank_text = "🥉 #3"
+                    rank_text = "\U0001F949 #3"
 
                 tk.Label(
                     row,
@@ -1935,23 +1869,8 @@ class AirCombatGame:
         self.records_trophy_after_id = None
         self.records_trophy_label = None
 
-        if self.records_window is not None:
-            try:
-                self.records_window.grab_release()
-            except tk.TclError:
-                pass
-            try:
-                self.records_window.destroy()
-            except tk.TclError:
-                pass
-            self.records_window = None
-
-        if self.records_backdrop is not None:
-            try:
-                self.records_backdrop.destroy()
-            except tk.TclError:
-                pass
-            self.records_backdrop = None
+        self.records_window = self.destroy_window(self.records_window, release_grab=True)
+        self.records_backdrop = self.destroy_window(self.records_backdrop)
 
     def loop(self):
         now = time.monotonic()
@@ -1987,7 +1906,6 @@ class AirCombatGame:
 
     def handle_menu_enemy_down(self):
         self.spawn_enemy_death_particles(self.menu_plane)
-        self.menu_points += 1
         self.canvas.coords(self.menu_plane, -80, random.randint(140, 210))
 
     def check_menu_collisions(self):
@@ -2568,56 +2486,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
